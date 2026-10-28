@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -107,6 +109,7 @@ func routes(service *app) *http.ServeMux {
 	mux.HandleFunc("GET /api/vps/rates", service.rates)
 	mux.HandleFunc("POST /api/vps/jsq", service.calculate)
 	mux.HandleFunc("GET /api/vps/share.svg", service.share)
+	mux.HandleFunc("GET /site-icon", service.siteIcon)
 	mux.HandleFunc("GET /share/", service.sharedImage)
 	mux.HandleFunc("GET /uploads/images/jsq/", service.sharedImage)
 	files := http.FileServer(http.Dir(service.staticDir))
@@ -130,16 +133,11 @@ func (a *app) index(w http.ResponseWriter, r *http.Request) {
 	if canonical == "" {
 		canonical = requestBaseURL(r)
 	}
-	icon := ""
-	if a.site.IconURL != "" {
-		icon = `<link rel="icon" href="` + html.EscapeString(a.site.IconURL) + `">`
-	}
 	content = []byte(strings.NewReplacer(
 		"__SITE_NAME__", html.EscapeString(a.site.Name),
 		"__SITE_DESCRIPTION__", html.EscapeString(a.site.Description),
 		"__SITE_KEYWORDS__", html.EscapeString(a.site.Keywords),
 		"__SITE_URL__", html.EscapeString(canonical),
-		"__SITE_ICON__", icon,
 		"__RATE_ATTRIBUTION__", a.rateAttributionHTML(),
 	).Replace(string(content)))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -186,10 +184,9 @@ func siteConfigFromEnv() (siteConfig, error) {
 		parsed, err := url.Parse(value)
 		isAbsolute := err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" && parsed.User == nil
 		isLocalPath := err == nil && strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//") && parsed.Host == "" && parsed.Scheme == ""
-		if !isAbsolute && !isLocalPath {
-			return siteConfig{}, errors.New("SITE_ICON_URL must be an http(s) URL or an absolute site path")
+		if isAbsolute || isLocalPath {
+			config.IconURL = value
 		}
-		config.IconURL = value
 	}
 	return config, nil
 }
@@ -475,10 +472,81 @@ func (a *app) renderShare(w http.ResponseWriter, r *http.Request, q url.Values) 
 	if name == "" {
 		name = defaultSiteConfig().Name
 	}
-	_, _ = io.WriteString(w, shareSVG(q, name, a.shareIconURL(r)))
+	iconURL := a.shareIconURL(r)
+	if iconURL != "" {
+		iconURL = a.embeddedShareIcon(r, iconURL)
+	}
+	if iconURL == "" {
+		if data, err := os.ReadFile(filepath.Join(a.staticDir, "static", "brand-icon.svg")); err == nil {
+			iconURL = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(data)
+		}
+	}
+	_, _ = io.WriteString(w, shareSVG(q, name, iconURL))
+}
+
+func (a *app) embeddedShareIcon(r *http.Request, iconURL string) string {
+	data, mediaType, ok := a.fetchSiteIcon(r, iconURL)
+	if !ok {
+		return ""
+	}
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+func (a *app) siteIcon(w http.ResponseWriter, r *http.Request) {
+	if a.site.IconURL != "" {
+		if data, mediaType, ok := a.fetchSiteIcon(r, a.resolvedSiteIconURL(r)); ok {
+			w.Header().Set("Content-Type", mediaType)
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_, _ = w.Write(data)
+			return
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(a.staticDir, "static", "brand-icon.svg"))
+	if err != nil {
+		http.Error(w, "site icon unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(data)
+}
+
+func (a *app) fetchSiteIcon(r *http.Request, iconURL string) ([]byte, string, bool) {
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, iconURL, nil)
+	if err != nil {
+		return nil, "", false
+	}
+	client := a.client
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, "", false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, "", false
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil || len(data) == 0 || len(data) > 1<<20 {
+		return nil, "", false
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || (mediaType != "image/png" && mediaType != "image/jpeg" && mediaType != "image/gif" && mediaType != "image/webp" && mediaType != "image/svg+xml") {
+		return nil, "", false
+	}
+	if !bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")) && mediaType == "image/png" {
+		return nil, "", false
+	}
+	return data, mediaType, true
 }
 
 func (a *app) shareIconURL(r *http.Request) string {
+	return a.resolvedSiteIconURL(r)
+}
+
+func (a *app) resolvedSiteIconURL(r *http.Request) string {
 	iconURL := a.site.IconURL
 	if iconURL == "" {
 		return ""
@@ -563,11 +631,13 @@ func shareSVGBase(q url.Values, siteName, iconURL string) string {
 		customPriceLabel = "自定义价 / " + customRate
 		customPrice = q.Get("custom_remain_value") + " 元"
 	}
+	iconFrame := `<rect x="54" y="46" width="44" height="44" rx="9" fill="#182923"/><path d="M65 59h22v17H65zM69 55v4m14-4v4m-14 21v4m14-4v4" fill="none" stroke="#b8e65c" stroke-width="2" stroke-linecap="round"/>`
 	iconImage := `<g transform="translate(54 46) scale(0.458333)"><rect width="96" height="96" rx="20" fill="#182923"/><path d="M22 25h52v16H22zm0 30h52v16H22z" fill="#b8e65c"/><circle cx="65" cy="33" r="3" fill="#182923"/><circle cx="65" cy="63" r="3" fill="#182923"/></g>`
 	if iconURL != "" {
-		iconImage += `<image href="` + escapeXML(iconURL) + `" x="54" y="46" width="44" height="44" preserveAspectRatio="xMidYMid slice" clip-path="url(#siteIconClip)"/>`
+		iconFrame = ""
+		iconImage = `<image href="` + escapeXML(iconURL) + `" x="58" y="50" width="36" height="36" preserveAspectRatio="xMidYMid meet" clip-path="url(#siteIconClip)"/>`
 	}
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="460" viewBox="0 0 720 460" role="img" aria-label="%s VPS 资产快照"><defs><clipPath id="siteIconClip"><rect x="54" y="46" width="44" height="44" rx="9"/></clipPath></defs><rect width="720" height="460" fill="#e8eee5"/><rect x="24" y="24" width="672" height="412" rx="14" fill="#fbfcf9" stroke="#d5dfd3"/><path d="M38 24h2v412h-2z" fill="#b8e65c"/><rect x="54" y="46" width="44" height="44" rx="9" fill="#182923"/><path d="M65 59h22v17H65zM69 55v4m14-4v4m-14 21v4m14-4v4" fill="none" stroke="#b8e65c" stroke-width="2" stroke-linecap="round"/>%s<text x="112" y="65" font-family="Arial, sans-serif" font-size="%d" font-weight="700" fill="#182923">%s</text><text x="112" y="84" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1.1" fill="#718078">VPS ASSET SNAPSHOT</text><text x="662" y="59" text-anchor="end" font-family="Arial, sans-serif" font-size="11" fill="#718078">生成于 %s</text><path d="M54 108h612" stroke="#dce4da"/><text x="58" y="139" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing=".7" fill="#718078">剩余价值 / REMAINING VALUE</text><text x="58" y="202" font-family="Arial, sans-serif" font-size="%d" font-weight="700" fill="#087e70">%s<tspan font-size="19" font-weight="500"> 元</tspan></text><rect x="501" y="126" width="163" height="108" rx="8" fill="#182923"/><path d="M519 144h22" stroke="#b8e65c" stroke-width="3" stroke-linecap="round"/><text x="519" y="164" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".8" fill="#c3cec4">剩余天数</text><text x="519" y="211" font-family="Arial, sans-serif" font-size="40" font-weight="700" fill="#fff">%s<tspan font-size="15" font-weight="500"> 天</tspan></text><text x="58" y="231" font-family="Arial, sans-serif" font-size="12" fill="#718078">总价值 %s 元</text><path d="M54 252h612" stroke="#dce4da"/><g font-family="Arial, sans-serif"><text x="58" y="280" font-size="10" font-weight="700" fill="#87948b">交易日期</text><text x="58" y="302" font-size="14" font-weight="600" fill="#182923">%s</text><text x="275" y="280" font-size="10" font-weight="700" fill="#87948b">付款方案</text><text x="275" y="302" font-size="14" font-weight="600" fill="#182923">%s · %s</text><text x="500" y="280" font-size="10" font-weight="700" fill="#87948b">到期时间</text><text x="500" y="302" font-size="14" font-weight="600" fill="#182923">%s</text><text x="58" y="337" font-size="10" font-weight="700" fill="#87948b">续费价格</text><text x="58" y="359" font-size="13" font-weight="600" fill="#182923">%s</text><text x="275" y="337" font-size="10" font-weight="700" fill="#87948b">折算汇率</text><text x="275" y="359" font-size="13" font-weight="600" fill="#182923">%s</text><text x="500" y="337" font-size="10" font-weight="700" fill="#87948b">%s</text><text x="500" y="359" font-size="11" font-weight="700" fill="#588a12">%s</text></g><path d="M54 389h612" stroke="#dce4da"/><text x="58" y="411" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".7" fill="#87948b">VPS / SERVER VALUE RECORD</text><text x="662" y="411" text-anchor="end" font-family="Arial, sans-serif" font-size="11" fill="#718078">由 %s 提供</text></svg>`, escapeXML(siteName), iconImage, siteFontSize, escapeXML(siteName), escapeXML(createdDate), valueFontSize, escapeXML(remainValue), escapeXML(q.Get("remain_days")), escapeXML(q.Get("total_value")), escapeXML(tradeDate), escapeXML(cycleName), escapeXML(currencyName), escapeXML(expiryDate), escapeXML(q.Get("renewal")), escapeXML(q.Get("exchange_rate")), escapeXML(customPriceLabel), escapeXML(customPrice), escapeXML(siteName))
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="720" height="460" viewBox="0 0 720 460" role="img" aria-label="%s VPS 资产快照"><defs><clipPath id="siteIconClip"><rect x="58" y="50" width="36" height="36" rx="7"/></clipPath></defs><rect width="720" height="460" fill="#e8eee5"/><rect x="24" y="24" width="672" height="412" rx="14" fill="#fbfcf9" stroke="#d5dfd3"/><path d="M38 24h2v412h-2z" fill="#b8e65c"/>%s%s<text x="112" y="65" font-family="Arial, sans-serif" font-size="%d" font-weight="700" fill="#182923">%s</text><text x="112" y="84" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1.1" fill="#718078">VPS ASSET SNAPSHOT</text><text x="662" y="59" text-anchor="end" font-family="Arial, sans-serif" font-size="11" fill="#718078">生成于 %s</text><path d="M54 108h612" stroke="#dce4da"/><text x="58" y="139" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing=".7" fill="#718078">剩余价值 / REMAINING VALUE</text><text x="58" y="202" font-family="Arial, sans-serif" font-size="%d" font-weight="700" fill="#087e70">%s<tspan font-size="19" font-weight="500"> 元</tspan></text><rect x="501" y="126" width="163" height="108" rx="8" fill="#182923"/><path d="M519 144h22" stroke="#b8e65c" stroke-width="3" stroke-linecap="round"/><text x="519" y="164" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".8" fill="#c3cec4">剩余天数</text><text x="519" y="211" font-family="Arial, sans-serif" font-size="40" font-weight="700" fill="#fff">%s<tspan font-size="15" font-weight="500"> 天</tspan></text><text x="58" y="231" font-family="Arial, sans-serif" font-size="12" fill="#718078">总价值 %s 元</text><path d="M54 252h612" stroke="#dce4da"/><g font-family="Arial, sans-serif"><text x="58" y="280" font-size="10" font-weight="700" fill="#87948b">交易日期</text><text x="58" y="302" font-size="14" font-weight="600" fill="#182923">%s</text><text x="275" y="280" font-size="10" font-weight="700" fill="#87948b">付款方案</text><text x="275" y="302" font-size="14" font-weight="600" fill="#182923">%s · %s</text><text x="500" y="280" font-size="10" font-weight="700" fill="#87948b">到期时间</text><text x="500" y="302" font-size="14" font-weight="600" fill="#182923">%s</text><text x="58" y="337" font-size="10" font-weight="700" fill="#87948b">续费价格</text><text x="58" y="359" font-size="13" font-weight="600" fill="#182923">%s</text><text x="275" y="337" font-size="10" font-weight="700" fill="#87948b">折算汇率</text><text x="275" y="359" font-size="13" font-weight="600" fill="#182923">%s</text><text x="500" y="337" font-size="10" font-weight="700" fill="#87948b">%s</text><text x="500" y="359" font-size="11" font-weight="700" fill="#588a12">%s</text></g><path d="M54 389h612" stroke="#dce4da"/><text x="58" y="411" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing=".7" fill="#87948b">VPS / SERVER VALUE RECORD</text><text x="662" y="411" text-anchor="end" font-family="Arial, sans-serif" font-size="11" fill="#718078">由 %s 提供</text></svg>`, escapeXML(siteName), iconFrame, iconImage, siteFontSize, escapeXML(siteName), escapeXML(createdDate), valueFontSize, escapeXML(remainValue), escapeXML(q.Get("remain_days")), escapeXML(q.Get("total_value")), escapeXML(tradeDate), escapeXML(cycleName), escapeXML(currencyName), escapeXML(expiryDate), escapeXML(q.Get("renewal")), escapeXML(q.Get("exchange_rate")), escapeXML(customPriceLabel), escapeXML(customPrice), escapeXML(siteName))
 }
 
 func requestBaseURL(r *http.Request) string {

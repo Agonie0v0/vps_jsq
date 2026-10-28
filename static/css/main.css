@@ -558,17 +558,15 @@ header {
     gap:12px;
 }
 .brand-mark {
-    display:grid;
-    place-items:center;
+    display:block;
     flex:0 0 42px;
     width:42px;
     height:42px;
+    box-sizing:border-box;
+    padding:4px;
     border-radius:10px 10px 10px 2px;
     background:var(--ledger-green);
-    color:var(--ledger-ink);
-    font-size:13px;
-    font-weight:850;
-    letter-spacing:0;
+    object-fit:contain;
 }
 h1 {
     width:auto;

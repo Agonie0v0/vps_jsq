@@ -53,6 +53,18 @@ func TestCalculateRejectsInvalidInput(t *testing.T) {
 
 func TestCalculateAndShareHandlers(t *testing.T) {
 	service := &app{
+		client: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.String() != "https://calc.example.test/brand/icon.svg" {
+				t.Fatalf("icon request URL = %q", request.URL)
+			}
+			header := make(http.Header)
+			header.Set("Content-Type", "image/png")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     header,
+				Body:       io.NopCloser(strings.NewReader("\x89PNG\r\n\x1a\n")),
+			}, nil
+		})},
 		staticDir: ".",
 		site: siteConfig{
 			Name: "ByteVibe VPS Calculator", URL: "https://calc.example.test", IconURL: "/brand/icon.svg",
@@ -101,7 +113,7 @@ func TestCalculateAndShareHandlers(t *testing.T) {
 	if !strings.Contains(share.Header().Get("Cache-Control"), "no-cache") {
 		t.Fatalf("share response should revalidate cached SVGs after visual updates, Cache-Control=%q", share.Header().Get("Cache-Control"))
 	}
-	if !strings.Contains(share.Body.String(), `viewBox="0 0 720 500"`) || !strings.Contains(share.Body.String(), `<rect width="720" height="500" fill=`) || !strings.Contains(share.Body.String(), "ByteVibe VPS Calculator") || !strings.Contains(share.Body.String(), "840.000 元") || !strings.Contains(share.Body.String(), "年付 · 美元") || !strings.Contains(share.Body.String(), "自定义价 / 7.500") || !strings.Contains(share.Body.String(), body.Data.CustomRemainValue+" 元") || !strings.Contains(share.Body.String(), `href="https://calc.example.test/brand/icon.svg"`) || !strings.Contains(share.Body.String(), "+30.548 元") || strings.Contains(share.Body.String(), "grad1") {
+	if !strings.Contains(share.Body.String(), `viewBox="0 0 720 500"`) || !strings.Contains(share.Body.String(), `<rect width="720" height="500" fill=`) || !strings.Contains(share.Body.String(), "ByteVibe VPS Calculator") || !strings.Contains(share.Body.String(), "840.000 元") || !strings.Contains(share.Body.String(), "年付 · 美元") || !strings.Contains(share.Body.String(), "自定义价 / 7.500") || !strings.Contains(share.Body.String(), body.Data.CustomRemainValue+" 元") || !strings.Contains(share.Body.String(), `href="data:image/png;base64,iVBORw0KGgo="`) || !strings.Contains(share.Body.String(), `x="58" y="50" width="36" height="36" preserveAspectRatio="xMidYMid meet"`) || strings.Contains(share.Body.String(), `transform="translate(54 46) scale(0.458333)"`) || !strings.Contains(share.Body.String(), "+30.548 元") || strings.Contains(share.Body.String(), "grad1") {
 		t.Fatalf("SVG is missing custom ledger layout or result fields: %s", share.Body.String())
 	}
 	var svg struct {
@@ -140,7 +152,7 @@ func TestShareUsesBuiltInIconWhenNoSiteIconIsConfigured(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("share status = %d", response.Code)
 	}
-	if strings.Contains(response.Body.String(), `<image href=`) || !strings.Contains(response.Body.String(), `transform="translate(54 46) scale(0.458333)"`) || !strings.Contains(response.Body.String(), `fill="#b8e65c"`) {
+	if !strings.Contains(response.Body.String(), `href="data:image/svg+xml;base64,`) || strings.Contains(response.Body.String(), `transform="translate(54 46) scale(0.458333)"`) {
 		t.Fatalf("SVG should embed the built-in icon when SITE_ICON_URL is unset: %s", response.Body.String())
 	}
 	iconRequest := httptest.NewRequest(http.MethodGet, "/static/brand-icon.svg", nil)
@@ -172,13 +184,26 @@ func TestIndexUsesConfiguredSiteMetadata(t *testing.T) {
 		`content="Rates &amp; value &#34;tool&#34;"`,
 		`content="vps,calculator"`,
 		`href="https://calc.example.test"`,
-		`href="/brand/icon.svg?rev=2&amp;theme=light"`,
+		`<link rel="icon" href="/site-icon" />`,
+		`<img class="brand-mark" src="/site-icon" alt="" />`,
 		"<h1>ByteVibe &lt;Calc&gt;</h1>",
 		`title="Frankfurter 汇率来源" aria-label="Frankfurter 汇率来源"><span class="rate-source-mark rate-source-mark-fr" aria-hidden="true">F</span></a>`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("index missing %q", expected)
 		}
+	}
+}
+
+func TestSiteIconFallsBackToBuiltInIcon(t *testing.T) {
+	service := &app{staticDir: ".", site: siteConfig{IconURL: "https://icons.test/missing.png"}, client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})}}
+	request := httptest.NewRequest(http.MethodGet, "/site-icon", nil)
+	response := httptest.NewRecorder()
+	routes(service).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/svg+xml; charset=utf-8" || !strings.Contains(response.Body.String(), "<svg") {
+		t.Fatalf("fallback icon response = %d/%q/%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
 	}
 }
 
@@ -194,6 +219,11 @@ func TestSiteConfigFromEnv(t *testing.T) {
 	}
 	if config.Name != "Test calculator" || config.Description != "A test site" || config.Keywords != "test,calculator" || config.URL != "https://calc.example.test" || config.IconURL != "/icon.svg" {
 		t.Fatalf("unexpected site config: %+v", config)
+	}
+	t.Setenv("SITE_ICON_URL", "not a valid icon url")
+	config, err = siteConfigFromEnv()
+	if err != nil || config.IconURL != "" {
+		t.Fatalf("invalid icon URL should fall back to the built-in icon: config=%+v err=%v", config, err)
 	}
 
 	t.Setenv("SITE_URL", "https://calc.example.test/path")
