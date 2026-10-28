@@ -1,0 +1,12 @@
+.git
+.github
+.gitea
+.idea
+.vscode
+docs
+dist
+kubernetes
+release
+node_modules
+*.tar.gz
+main_test.go

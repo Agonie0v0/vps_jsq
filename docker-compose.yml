@@ -1,12 +1,18 @@
-version: "3.3"
 services:
   jsq:
-    image: hahabye/vps_jsq:latest
+    build: .
+    image: vps-jsq:local
     container_name: jsq
-    restart: always
+    restart: unless-stopped
     ports:
-      - 8088:80
+      - "${HOST_PORT:-8088}:8080"
     environment:
       TZ: Asia/Shanghai
-
-      
+      RATE_PROVIDER: ${RATE_PROVIDER:-frankfurter}
+      EXCHANGERATE_API_KEY: ${EXCHANGERATE_API_KEY:-}
+      RATES_URL: ${RATES_URL:-}
+      SITE_NAME: ${SITE_NAME:-VPS 剩余价值计算器}
+      SITE_DESCRIPTION: ${SITE_DESCRIPTION:-计算 VPS 剩余价值和剩余时间，支持多种货币、付款周期及 SVG 分享。}
+      SITE_KEYWORDS: ${SITE_KEYWORDS:-VPS,剩余价值,计算器,续费,汇率}
+      SITE_URL: ${SITE_URL:-}
+      SITE_ICON_URL: ${SITE_ICON_URL:-}

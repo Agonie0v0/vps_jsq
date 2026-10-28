@@ -1,0 +1,34 @@
+# Go build and test artifacts
+bin/
+build/
+out/
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Local runtime and cache files
+.cache/
+.gocache/
+tmp/
+*.log
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Docker and release artifacts
+.docker/
+*.tar
+*.tar.gz
+release/
+
+# Frontend/package manager artifacts
+node_modules/
+
+# IDE and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

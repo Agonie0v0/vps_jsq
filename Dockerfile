@@ -1,14 +1,15 @@
-# 使用官方 nginx 镜像作为基础镜像
-FROM nginx:1.27-alpine
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod main.go ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/vps-jsq .
 
-# 设置工作目录
-# WORKDIR /app
-
-# 复制项目文件到容器
-COPY dist/* /usr/share/nginx/html/
-
-# 暴露容器的 80 端口
-EXPOSE 80
-
-# 设置容器启动命令
-CMD ["nginx", "-g", "daemon off;"]
+FROM alpine:3.21
+WORKDIR /app
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/vps-jsq /app/vps-jsq
+COPY index.html /app/
+COPY static /app/static
+ENV PORT=8080 STATIC_DIR=/app
+EXPOSE 8080
+USER 10001:10001
+ENTRYPOINT ["/app/vps-jsq"]

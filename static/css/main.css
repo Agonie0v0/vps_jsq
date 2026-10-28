@@ -355,10 +355,45 @@ button.calculate_btn .calculate_text_content, button.calculate_btn .calculate_lo
 }
 .reference_label {
     display:flex;
-    align-items:center
+    align-items:center;
+    flex-wrap:nowrap;
+    gap:4px
 }
 .rate_updated {
-    color:var(--color-text-secondary)
+    color:var(--color-text-secondary);
+    white-space:nowrap;
+    font-size:12px
+}
+.rate-source-link {
+    display:inline-flex;
+    align-items:center;
+    margin-left:2px;
+    color:inherit;
+    text-decoration:none;
+    vertical-align:middle;
+    flex:0 0 16px
+}
+.rate-source-link:hover {
+    text-decoration:underline
+}
+.rate-source-mark {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:16px;
+    height:16px;
+    flex:0 0 16px;
+    border-radius:3px;
+    color:#fff;
+    font-size:9px;
+    font-weight:700;
+    line-height:1
+}
+.rate-source-mark-fr {
+    background:#386b58
+}
+.rate-source-mark-er {
+    background:#276b9b
 }
 .updated_date {
     margin:0 5px
@@ -462,6 +497,9 @@ footer a:hover {
     text-decoration:underline
 }
 footer svg {
+    margin:0 1px 0 3px
+}
+footer img {
     margin:0 1px 0 3px
 }
 footer span {

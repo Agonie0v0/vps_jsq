@@ -4,7 +4,13 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'dist/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'go.mod'
+      - 'main.go'
+      - 'index.html'
+      - 'static/**'
   workflow_dispatch:
 
 env:
