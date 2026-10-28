@@ -26,17 +26,36 @@
 
 ## 部署
 
-需要 Docker Engine 和 Docker Compose。在项目目录运行：
+需要 Docker Engine 和 Docker Compose。在项目目录复制环境变量模板：
+
+```sh
+cp .env.example .env
+```
+
+默认使用本机直连模式，服务只绑定 `127.0.0.1:8088`：
 
 ```sh
 docker compose up -d --build
 ```
 
-默认访问 `http://localhost:8088`。如需更换主机端口，可在启动时设置 `HOST_PORT`：
+如需更换直连端口，修改 `.env` 中的 `HOST_PORT`；如需更换绑定地址，修改 `HOST_BIND_ADDRESS`。
+
+### Traefik
+
+先确保 Traefik 已连接到一个 Docker 外部网络。启用时，把 `.env` 中的 `COMPOSE_FILE` 改为以下值，并将 `TRAEFIK_ENABLED` 设为 `1`，再填写下方 Traefik 配置：
 
 ```sh
-HOST_PORT=9000 docker compose up -d --build
+COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
 ```
+
+之后使用普通命令启停即可：
+
+```sh
+docker compose up -d --build
+docker compose down
+```
+
+覆盖文件会移除主机端口映射，并把服务加入 `${TRAEFIK_NETWORK}` 外部网络。关闭 Traefik 模式时，将 `COMPOSE_FILE` 恢复为 `docker-compose.yml`，并将 `TRAEFIK_ENABLED` 设为 `0`。Traefik 标签通过环境变量配置 Host 规则、entrypoints、router 名称、TLS、证书解析器、优先级及可选中间件。`TRAEFIK_MIDDLEWARES` 指向的中间件必须由 Traefik file provider 定义；不使用中间件时，请同步从 `docker-compose.traefik.yml` 删除 `traefik.http.routers.*.middlewares` 这一行。启用 TLS 时，请确认 `TRAEFIK_CERTRESOLVER` 与 Traefik 中配置的解析器名称一致。
 
 查看日志或停止服务：
 
@@ -59,7 +78,16 @@ cp .env.example .env
 
 | 变量 | 说明 |
 | --- | --- |
-| `HOST_PORT` | Docker 暴露到主机的端口，默认 `8088` |
+| `HOST_BIND_ADDRESS`、`HOST_PORT` | 直连模式的主机绑定地址和端口，默认 `127.0.0.1:8088`；Traefik 模式不发布主机端口 |
+| `COMPOSE_FILE` | Compose 配置选择；直连使用 `docker-compose.yml`，Traefik 使用 `docker-compose.yml:docker-compose.traefik.yml` |
+| `TRAEFIK_ENABLED` | Traefik 模式标记，需与 `COMPOSE_FILE` 保持一致：启用为 `1`，直连为 `0` |
+| `TRAEFIK_HOST` | Traefik 路由匹配的域名 |
+| `TRAEFIK_NETWORK` | Traefik 已连接的 Docker 外部网络名称，默认 `frontend` |
+| `TRAEFIK_ENTRYPOINTS` | Traefik entrypoints，默认 `https` |
+| `TRAEFIK_ROUTER_NAME` | Router 和关联 service 名称，默认 `vps_cal` |
+| `TRAEFIK_TLS`、`TRAEFIK_CERTRESOLVER` | 是否启用 TLS 及证书解析器名称 |
+| `TRAEFIK_PRIORITY` | Router 优先级，默认 `10` |
+| `TRAEFIK_MIDDLEWARES` | 可选中间件列表，默认 `real-ip@file`；需在 Traefik file provider 定义 |
 | `RATE_PROVIDER` | 汇率来源：`frankfurter` 或 `exchangerate-api` |
 | `EXCHANGERATE_API_KEY` | ExchangeRate-API 密钥，可留空使用其 Open Access 接口 |
 | `RATES_URL` | 可选的兼容汇率接口地址覆盖项 |

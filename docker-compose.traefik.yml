@@ -1,0 +1,21 @@
+services:
+  jsq:
+    ports: !reset []
+    labels:
+      - "traefik.enable=${TRAEFIK_ENABLED:-1}"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-frontend}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.rule=Host(`${TRAEFIK_HOST:?Set TRAEFIK_HOST in .env}`)"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.entrypoints=${TRAEFIK_ENTRYPOINTS:-https}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.priority=${TRAEFIK_PRIORITY:-10}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.tls=${TRAEFIK_TLS:-true}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-cloudflare}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-vps_cal}.middlewares=${TRAEFIK_MIDDLEWARES:-}"
+      - "traefik.http.services.${TRAEFIK_ROUTER_NAME:-vps_cal}.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - frontend
+
+networks:
+  frontend:
+    name: "${TRAEFIK_NETWORK:-frontend}"
+    external: true
