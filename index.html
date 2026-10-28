@@ -16,7 +16,11 @@
   <div id="app">
 
     <header>
-      <h1>__SITE_NAME__</h1>
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">BV</span>
+        <h1>__SITE_NAME__</h1>
+      </div>
+      <p class="page-intro">把服务器的剩余时间，换算成清晰的资产数字。</p>
     </header>
 
     <main class="bg">
@@ -75,12 +79,17 @@
             </div>
 
             <div>
+              <label for="transaction_amount">VPS 交易金额（人民币，可选）</label>
+              <input type="number" id="transaction_amount" name="transaction_amount" min="0" step="0.01" placeholder="输入转让成交价" tabindex="5" />
+            </div>
+
+            <div>
               <label>到期时间</label>
-              <div><input type="date" id="expiry_date" name="expiry_date" required="true" tabindex="5" /></div>
+              <div><input type="date" id="expiry_date" name="expiry_date" required="true" tabindex="6" /></div>
             </div>
             <div>
               <label>交易日期</label>
-              <div><input type="date" id="trade_date" name="trade_date" required="true" tabindex="6" /></div>
+              <div><input type="date" id="trade_date" name="trade_date" required="true" tabindex="7" /></div>
             </div>
           </div>
 
@@ -112,7 +121,8 @@
       <section class="cal-relsult">
         <div id="result" class="result inner_bg">
           <div class="result_head">
-            <h2>计算结果</h2>
+            <h2>资产快照</h2>
+            <span class="result_stamp">VPS VALUE / LIVE</span>
           </div>
 
           <table class="result_body output">
@@ -141,6 +151,14 @@
                 <td>自定义：</td>
                 <td><span class="output_custom_future_value">0.000 元</span><span class="output_custom_exchange_rate">(汇率 0.00)</span></td>
               </tr>
+              <tr id="tr_transaction_show" style="display: none">
+                <td>交易金额：</td>
+                <td><span class="output_transaction_amount">0.000 元</span></td>
+              </tr>
+              <tr id="tr_premium_show" style="display: none">
+                <td>溢价值：</td>
+                <td><span class="output_premium">0.000 元</span><span class="output_premium_rate"></span></td>
+              </tr>
             </tbody>
           </table>
 
@@ -148,7 +166,7 @@
 
         <div id="share" class="share inner_bg">
           <div class="pic_share">
-            <div class="share_title">图片分享链接</div>
+            <div class="share_title">分享这份资产快照</div>
 
             <input id="is_calculated" type="hidden" value="" />
             <input id="share_url" type="hidden" value="" />

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -54,11 +55,11 @@ func TestCalculateAndShareHandlers(t *testing.T) {
 	service := &app{
 		staticDir: ".",
 		site: siteConfig{
-			Name: "ByteVibe VPS Calculator", URL: "https://calc.example.test",
+			Name: "ByteVibe VPS Calculator", URL: "https://calc.example.test", IconURL: "/brand/icon.svg",
 			Description: "Example description", Keywords: "vps,calculator",
 		},
 	}
-	requestBody := `{"exchange_rate":"7","custom_exchange_rate":"7.5","renew_money":"120","currency_code":"USD","cycle":"annually","expiry_date":"2025-03-31","trade_date":"2025-01-01"}`
+	requestBody := `{"exchange_rate":"7","custom_exchange_rate":"7.5","renew_money":"120","transaction_amount":"250","currency_code":"USD","cycle":"annually","expiry_date":"2025-03-31","trade_date":"2025-01-01"}`
 	request := httptest.NewRequest("POST", "/api/v1/calculate", strings.NewReader(requestBody))
 	request.Host = "example.test"
 	request.Header.Set("Origin", "https://example.test")
@@ -74,7 +75,7 @@ func TestCalculateAndShareHandlers(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Status != "success" || body.Data.RemainValue == "" {
+	if body.Status != "success" || body.Data.RemainValue == "" || body.Data.Premium != "30.548" {
 		t.Fatalf("unexpected calculate response: %+v", body)
 	}
 	if body.Data.Renewal != "120.00 美元 / 年" {
@@ -97,8 +98,56 @@ func TestCalculateAndShareHandlers(t *testing.T) {
 	if share.Code != http.StatusOK || !strings.Contains(share.Header().Get("Content-Type"), "image/svg+xml") {
 		t.Fatalf("share response status/content-type = %d/%q", share.Code, share.Header().Get("Content-Type"))
 	}
-	if !strings.Contains(share.Body.String(), `viewBox="0 0 570 400"`) || !strings.Contains(share.Body.String(), "ByteVibe VPS Calculator") || !strings.Contains(share.Body.String(), "(总 840.000 元)") {
-		t.Fatalf("SVG is missing official layout or result fields: %s", share.Body.String())
+	if !strings.Contains(share.Header().Get("Cache-Control"), "no-cache") {
+		t.Fatalf("share response should revalidate cached SVGs after visual updates, Cache-Control=%q", share.Header().Get("Cache-Control"))
+	}
+	if !strings.Contains(share.Body.String(), `viewBox="0 0 720 500"`) || !strings.Contains(share.Body.String(), `<rect width="720" height="500" fill=`) || !strings.Contains(share.Body.String(), "ByteVibe VPS Calculator") || !strings.Contains(share.Body.String(), "840.000 元") || !strings.Contains(share.Body.String(), "年付 · 美元") || !strings.Contains(share.Body.String(), "自定义价 / 7.500") || !strings.Contains(share.Body.String(), body.Data.CustomRemainValue+" 元") || !strings.Contains(share.Body.String(), `href="https://calc.example.test/brand/icon.svg"`) || !strings.Contains(share.Body.String(), "+30.548 元") || strings.Contains(share.Body.String(), "grad1") {
+		t.Fatalf("SVG is missing custom ledger layout or result fields: %s", share.Body.String())
+	}
+	var svg struct {
+		XMLName xml.Name `xml:"svg"`
+	}
+	if err := xml.Unmarshal(share.Body.Bytes(), &svg); err != nil || svg.XMLName.Local != "svg" {
+		t.Fatalf("share response is not valid SVG XML: %v", err)
+	}
+}
+
+func TestCalculateReturnsDiscountForZeroTransaction(t *testing.T) {
+	request := calculateRequest{
+		ExchangeRate: "7", CustomExchangeRate: "7", RenewMoney: "120", TransactionAmount: "0",
+		CurrencyCode: "USD", Cycle: "annually", ExpiryDate: "2025-03-31", TradeDate: "2025-01-01",
+	}
+	result, err := calculate(request, httptest.NewRequest(http.MethodPost, "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TransactionAmount != "0.000" || result.Premium != "-204.822" {
+		t.Fatalf("zero transaction result = amount %q, premium %q", result.TransactionAmount, result.Premium)
+	}
+}
+
+func TestShareUsesBuiltInIconWhenNoSiteIconIsConfigured(t *testing.T) {
+	service := &app{site: siteConfig{Name: "Test VPS", URL: "https://calc.example.test"}}
+	values := url.Values{
+		"trade_date": {"2025-01-01"}, "expiry_date": {"2025-03-31"},
+		"currency_code": {"USD"}, "cycle": {"annually"}, "renewal": {"120.00 美元 / 年"},
+		"remain_days": {"89"}, "remain_value": {"204.658"}, "exchange_rate": {"7.000"},
+		"total_value": {"840.000"},
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/vps/share.svg?"+values.Encode(), nil)
+	response := httptest.NewRecorder()
+	routes(service).ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("share status = %d", response.Code)
+	}
+	if strings.Contains(response.Body.String(), `<image href=`) || !strings.Contains(response.Body.String(), `transform="translate(54 46) scale(0.458333)"`) || !strings.Contains(response.Body.String(), `fill="#b8e65c"`) {
+		t.Fatalf("SVG should embed the built-in icon when SITE_ICON_URL is unset: %s", response.Body.String())
+	}
+	iconRequest := httptest.NewRequest(http.MethodGet, "/static/brand-icon.svg", nil)
+	iconResponse := httptest.NewRecorder()
+	routes(service).ServeHTTP(iconResponse, iconRequest)
+	if iconResponse.Code != http.StatusOK || !strings.Contains(iconResponse.Body.String(), `<svg`) {
+		t.Fatalf("built-in site icon is not served: status=%d body=%s", iconResponse.Code, iconResponse.Body.String())
 	}
 }
 

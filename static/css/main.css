@@ -408,6 +408,20 @@ label.reference {
     color:var(--color-text-tertiary);
     font-size:small
 }
+.output_premium_rate {
+    margin-left:5px;
+    color:var(--color-text-tertiary);
+    font-size:11px;
+}
+.output_premium {
+    font-weight:780;
+}
+.output_premium.premium-positive {
+    color:#c15c24;
+}
+.output_premium.premium-negative {
+    color:#087e70;
+}
 .output_remain_days {
     color:#087f5b
 }
@@ -507,4 +521,292 @@ footer span {
     background-color:#ccc;
     width:2px;
     margin:1em .5em
+}
+
+/* ByteVibe ledger identity */
+:root {
+    --value-max-width-page: 1040px;
+    --color-text-primary: #182923;
+    --color-text-secondary: #61716a;
+    --color-text-tertiary: #89958f;
+    --ledger-paper: #f3f6f0;
+    --ledger-line: #dce4da;
+    --ledger-ink: #182923;
+    --ledger-green: #b8e65c;
+    --ledger-teal: #087e70;
+}
+html {
+    background:var(--ledger-paper);
+}
+body {
+    min-height:100vh;
+    color:var(--ledger-ink);
+    background-color:var(--ledger-paper);
+    background-image:radial-gradient(#c8d2c7 0.7px, transparent 0.7px);
+    background-size:18px 18px;
+}
+#app {
+    padding:34px 24px 20px;
+}
+header {
+    margin:0 0 22px;
+    text-align:left;
+}
+.brand-lockup {
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+.brand-mark {
+    display:grid;
+    place-items:center;
+    flex:0 0 42px;
+    width:42px;
+    height:42px;
+    border-radius:10px 10px 10px 2px;
+    background:var(--ledger-green);
+    color:var(--ledger-ink);
+    font-size:13px;
+    font-weight:850;
+    letter-spacing:0;
+}
+h1 {
+    width:auto;
+    margin:0;
+    color:var(--ledger-ink);
+    background:none;
+    -webkit-text-stroke:0;
+    font-size:26px;
+    font-weight:760;
+    letter-spacing:0;
+    text-align:left;
+}
+.page-intro {
+    margin:8px 0 0 54px;
+    color:var(--color-text-secondary);
+    font-size:13px;
+}
+main.bg {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) minmax(0, .94fr);
+    align-items:start;
+    gap:16px;
+    padding:0;
+    border-radius:0;
+    background:none;
+}
+.calculator, .cal-relsult {
+    width:100%;
+    min-width:0;
+}
+.calculate_body, .result, .share {
+    border:1px solid var(--ledger-line);
+    border-radius:9px;
+    background:#fff;
+    padding:20px;
+}
+.calculate_body {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px 12px;
+}
+.calculate_body > div {
+    min-width:0;
+}
+.calculate_body > div:first-child {
+    grid-column:1 / -1;
+    padding-bottom:12px;
+    border-bottom:1px solid var(--ledger-line);
+}
+label {
+    margin-bottom:6px;
+    color:var(--color-text-secondary);
+    font-size:12px;
+    font-weight:650;
+}
+.reference_label {
+    justify-content:space-between;
+    align-items:flex-start;
+}
+.rate_updated {
+    font-size:11px;
+}
+input, select, input[name=renew_money], input[type=date], select[name=currency_code], select[name=payment_cycle] {
+    width:100%;
+    min-width:0;
+    height:42px;
+    border:1px solid #cbd5cc;
+    border-radius:5px;
+    background-color:#fbfcfa;
+    color:var(--ledger-ink);
+    font-size:14px;
+}
+.calculate_body > div:nth-child(2) {
+    grid-column:1 / -1;
+}
+.calculate_body > div:nth-child(3) > div {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) minmax(0, 1.2fr);
+}
+.calculate_body > div:nth-child(3) input,
+.calculate_body > div:nth-child(3) select {
+    border-radius:0;
+}
+.calculate_body > div:nth-child(3) input {
+    border-radius:5px 0 0 5px;
+}
+.calculate_body > div:nth-child(3) select {
+    border-left:0;
+    border-radius:0 5px 5px 0;
+}
+input:focus, select:focus {
+    border-color:var(--ledger-teal);
+    box-shadow:0 0 0 3px #087e701c;
+}
+input:disabled {
+    background:#edf2ec;
+    color:#637168;
+}
+.calculate_action {
+    margin:12px 0 0;
+}
+button.calculate_btn, button.btn {
+    min-height:46px;
+    border:1px solid var(--ledger-ink);
+    border-radius:5px;
+    background:var(--ledger-ink);
+    color:#fff;
+    font-weight:700;
+    transition:background-color .16s ease, color .16s ease;
+}
+button.calculate_btn:hover, button.btn:hover {
+    background:var(--ledger-teal);
+    color:#fff;
+}
+.cal-relsult {
+    display:grid;
+    gap:12px;
+}
+.result_head {
+    justify-content:space-between;
+    padding:0 0 14px;
+    border-bottom:1px solid var(--ledger-line);
+}
+h2 {
+    padding:0;
+    font-size:16px;
+    font-weight:750;
+    text-align:left;
+}
+.result_stamp {
+    color:var(--ledger-teal);
+    font-size:10px;
+    font-weight:750;
+}
+table.output {
+    display:table;
+    overflow:visible;
+    border-collapse:separate;
+    border-spacing:0 3px;
+}
+table.output tr, table.output tr:nth-child(2n) {
+    background:transparent;
+    border:0;
+}
+table.output th, table.output td {
+    padding:9px 7px;
+    border:0;
+    border-bottom:1px solid #edf0eb;
+    background:transparent;
+}
+table.output tr > td:first-child {
+    width:36%;
+    color:var(--color-text-secondary);
+    text-align:left;
+    white-space:nowrap;
+}
+table.output tr > td:last-child {
+    width:auto;
+    text-align:right;
+}
+.output_remain_value {
+    color:var(--ledger-teal);
+    font-size:20px;
+    font-weight:780;
+}
+.output_remain_days {
+    color:#588a12;
+    font-weight:750;
+}
+.output_expiry_date, .output_total_value, .output_custom_exchange_rate {
+    margin-left:5px;
+    color:var(--color-text-tertiary);
+    font-size:11px;
+}
+.share {
+    margin:0;
+    padding:13px 16px;
+    background:#e8efe5;
+}
+.share_title {
+    justify-content:flex-start;
+    color:var(--ledger-ink);
+    font-size:12px;
+    font-weight:650;
+}
+button.view_btn, button.copy_btn, button.copied_btn {
+    width:74px;
+    height:32px;
+    border:1px solid #c5d1c4;
+    border-radius:4px;
+    background:#fff;
+    color:var(--ledger-ink);
+}
+button.view_btn:hover, button.copy_btn:hover, button.copied_btn:hover {
+    background:var(--ledger-green);
+}
+footer {
+    margin-top:18px;
+    color:var(--color-text-secondary);
+    font-size:12px;
+}
+footer a {
+    color:var(--color-text-secondary);
+}
+@media (max-width: 760px) {
+    #app {
+        padding:24px 14px 16px;
+    }
+    main.bg {
+        grid-template-columns:minmax(0, 1fr);
+        gap:12px;
+    }
+    .calculate_body, .result {
+        padding:16px;
+    }
+}
+@media (max-width: 390px) {
+    .calculate_body {
+        grid-template-columns:minmax(0, 1fr);
+    }
+    .calculate_body > div:first-child,
+    .calculate_body > div:nth-child(2) {
+        grid-column:1;
+    }
+    .reference_label {
+        display:block;
+    }
+    .rate_updated {
+        white-space:normal;
+    }
+    table.output tr > td:first-child {
+        width:34%;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior:auto !important;
+        animation-duration:.01ms !important;
+        transition-duration:.01ms !important;
+    }
 }

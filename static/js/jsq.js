@@ -44,6 +44,7 @@
       t = document.getElementById("renew_money"),
       a = document.getElementById("expiry_date"),
       n = document.getElementById("trade_date"),
+      deal = document.getElementById("transaction_amount"),
       d = document.getElementById("reference_rate").value,
       l = e.value,
       i = t.value,
@@ -66,6 +67,7 @@
         exchange_rate: d,
         custom_exchange_rate: l,
         renew_money: i,
+        transaction_amount: deal.value,
         currency_code: _,
         cycle: g,
         expiry_date: y,
@@ -104,6 +106,24 @@
         }), document.querySelectorAll(".output_custom_exchange_rate").forEach(o => {
           o.innerText = "(汇率 " + r.data.custom_exchange_rate + ")"
         });
+        const hasDeal = r.data.transaction_amount !== "";
+        document.getElementById("tr_transaction_show").style.display = hasDeal ? "" : "none";
+        document.getElementById("tr_premium_show").style.display = hasDeal ? "" : "none";
+        if (hasDeal) {
+          document.querySelectorAll(".output_transaction_amount").forEach(o => {
+            o.innerText = r.data.transaction_amount + " 元"
+          });
+          document.querySelectorAll(".output_premium").forEach(o => {
+            o.innerText = (Number(r.data.premium) > 0 ? "+" : "") + r.data.premium + " 元"
+          });
+          document.querySelectorAll(".output_premium").forEach(o => {
+            o.classList.toggle("premium-positive", Number(r.data.premium) > 0);
+            o.classList.toggle("premium-negative", Number(r.data.premium) < 0)
+          });
+          document.querySelectorAll(".output_premium_rate").forEach(o => {
+            o.innerText = "(" + (Number(r.data.premium) > 0 ? "溢价" : Number(r.data.premium) < 0 ? "折价" : "平价") + ")"
+          });
+        }
         let s = r.data.exchange_rate;
         s = typeof s > "u" ? "0.000" : s;
         let m = r.data.custom_exchange_rate;
@@ -197,7 +217,7 @@
 
   function x() {
     document.querySelectorAll(
-      "#exchange_rate, #renew_money, #currency_code, #payment_cycle, #expiry_date, #trade_date").forEach(
+      "#exchange_rate, #renew_money, #transaction_amount, #currency_code, #payment_cycle, #expiry_date, #trade_date").forEach(
         e => {
           e.addEventListener("change", function (t) {
             document.getElementById("is_calculated").value = "0"
