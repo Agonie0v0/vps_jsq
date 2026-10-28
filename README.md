@@ -8,7 +8,7 @@
 
 项目遵循 [GPL-3.0](LICENSE.txt)。基于本项目修改或分发代码时，请遵守许可证要求，并保留原项目及本项目的版权和许可声明。
 
-在线体验：[VPS 剩余价值计算器](https://tools.196000.xyz/jsq)
+在线体验：[VPS 剩余价值计算器](https://jsq.bytevibe.dev)
 
 ## 功能
 
@@ -22,51 +22,89 @@
 
 以下示例包含自定义汇率、成交金额和折价结果：
 
+![VPS 剩余价值 使用示例](https://img.bytevibe.dev/oneimg/2026/10/18e2ba8fb3b6455a240_305ccd6f-ed6e-474c-b239-121bd5704b57.webp)
 ![VPS 剩余价值 SVG 分享图示例](docs/screenshots/jsq.png)
 
 ## 部署
 
-需要 Docker Engine 和 Docker Compose。在项目目录复制环境变量模板：
+需要 Docker Engine 和 Docker Compose。部署已发布的镜像时，只需要准备一个目录，下载环境变量模板并复制为 `.env`：
 
 ```sh
+curl -fsSL https://git.bytevibe.dev/gary/vps_jsq/raw/branch/main/.env.example -o .env.example
 cp .env.example .env
 ```
 
-默认使用本机直连模式，服务只绑定 `127.0.0.1:8088`：
+在同一目录创建 `docker-compose.yaml`：
 
-```sh
-docker compose up -d --build
+```yaml
+services:
+  jsq:
+    image: git.bytevibe.dev/gary/vps_jsq:latest
+    container_name: jsq
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8088}:8080"
+    volumes:
+      - jsq-data:/data
+
+volumes:
+  jsq-data:
 ```
 
-如需更换直连端口，修改 `.env` 中的 `HOST_PORT`；如需更换绑定地址，修改 `HOST_BIND_ADDRESS`。
-
-### Traefik
-
-先确保 Traefik 已连接到一个 Docker 外部网络。启用时，把 `.env` 中的 `COMPOSE_FILE` 改为以下值，并将 `TRAEFIK_ENABLED` 设为 `1`，再填写下方 Traefik 配置：
+启动和停止服务：
 
 ```sh
-COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
-```
-
-之后使用普通命令启停即可：
-
-```sh
-docker compose up -d --build
-docker compose down
-```
-
-覆盖文件会移除主机端口映射，并把服务加入 `${TRAEFIK_NETWORK}` 外部网络。关闭 Traefik 模式时，将 `COMPOSE_FILE` 恢复为 `docker-compose.yml`，并将 `TRAEFIK_ENABLED` 设为 `0`。Traefik 标签通过环境变量配置 Host 规则、entrypoints、router 名称、TLS、证书解析器、优先级及可选中间件。`TRAEFIK_MIDDLEWARES` 指向的中间件必须由 Traefik file provider 定义；不使用中间件时，请同步从 `docker-compose.traefik.yml` 删除 `traefik.http.routers.*.middlewares` 这一行。启用 TLS 时，请确认 `TRAEFIK_CERTRESOLVER` 与 Traefik 中配置的解析器名称一致。
-
-查看日志或停止服务：
-
-```sh
+docker compose up -d
 docker compose logs -f
 docker compose down
 ```
 
+默认服务只绑定 `127.0.0.1:8088`。如需更换端口或绑定地址，修改 `.env` 中的 `HOST_PORT` 和 `HOST_BIND_ADDRESS`。
+
+### Traefik
+
+如果使用 Traefik，可以直接使用仓库中的覆盖文件：
+
+```sh
+curl -fsSL https://git.bytevibe.dev/gary/vps_jsq/raw/branch/main/docker-compose.traefik.yml -o docker-compose.traefik.yml
+```
+
+将 `.env` 中的 `TRAEFIK_ENABLED` 设为 `1`，确认 Traefik 已连接到 `${TRAEFIK_NETWORK}` 外部网络，然后使用基础文件和覆盖文件启动：
+
+```sh
+docker compose -f docker-compose.yaml -f docker-compose.traefik.yml up -d
+docker compose -f docker-compose.yaml -f docker-compose.traefik.yml logs -f
+docker compose -f docker-compose.yaml -f docker-compose.traefik.yml down
+```
+
+覆盖文件会移除主机端口映射，并加入 Traefik labels 和外部网络。`TRAEFIK_HOST`、`TRAEFIK_ENTRYPOINTS`、`TRAEFIK_ROUTER_NAME`、TLS、证书解析器和中间件都从 `.env` 读取。`TRAEFIK_MIDDLEWARES` 指向的中间件必须先在 Traefik file provider 中定义；不使用中间件时，请从覆盖文件删除对应 label。
+
 页面和 API 由同一个 Go 服务提供，不需要单独构建前端。`dist/` 是历史静态发布产物，不参与当前 Docker 镜像构建。
 
 主页页脚展示今日和累计成功计算次数，数据保存在 SQLite。Docker Compose 默认将数据库保存在 `jsq-data` 持久化卷中；可用 `DB_PATH` 修改容器内路径。计算接口默认按客户端 IP 每分钟限制 30 次，可通过 `CALCULATE_RATE_LIMIT` 和 `CALCULATE_RATE_WINDOW` 调整；达到限制时返回 HTTP 429。
+
+### Gitea Actions 发布
+
+`.gitea/workflows/release.yml` 会在推送任意 tag 时运行测试，构建并推送 `linux/amd64` 和 `linux/arm64` 两种架构的镜像，同时创建对应的 Gitea Release，并更新 `latest` 标签。
+
+请在仓库的 Gitea Actions secrets 中配置以下变量。Secret 名称特意不以 `gitea` 开头：
+
+| Secret | 说明 |
+| --- | --- |
+| `REGISTRY_HOST` | Gitea 容器镜像仓库地址，例如 `git.bytevibe.dev` |
+| `REGISTRY_USERNAME` | 镜像仓库登录用户名 |
+| `REGISTRY_PASSWORD` | 镜像仓库密码或访问令牌 |
+
+创建 Release 使用 Gitea Actions 自动提供的 `${{ secrets.GITEA_TOKEN }}`，无需额外创建令牌 Secret。Workflow 为该 job 请求 `releases: write` 权限；如果仓库或实例的 Actions 权限上限未允许写 Release，需要在对应设置中放开。
+
+推送版本示例：
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## 配置
 
@@ -81,8 +119,7 @@ cp .env.example .env
 | 变量 | 说明 |
 | --- | --- |
 | `HOST_BIND_ADDRESS`、`HOST_PORT` | 直连模式的主机绑定地址和端口，默认 `127.0.0.1:8088`；Traefik 模式不发布主机端口 |
-| `COMPOSE_FILE` | Compose 配置选择；直连使用 `docker-compose.yml`，Traefik 使用 `docker-compose.yml:docker-compose.traefik.yml` |
-| `TRAEFIK_ENABLED` | Traefik 模式标记，需与 `COMPOSE_FILE` 保持一致：启用为 `1`，直连为 `0` |
+| `TRAEFIK_ENABLED` | Traefik 覆盖文件开关：启用 `docker-compose.traefik.yml` 时设为 `1`，直连为 `0` |
 | `TRAEFIK_HOST` | Traefik 路由匹配的域名 |
 | `TRAEFIK_NETWORK` | Traefik 已连接的 Docker 外部网络名称，默认 `frontend` |
 | `TRAEFIK_ENTRYPOINTS` | Traefik entrypoints，默认 `https` |
