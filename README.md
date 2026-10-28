@@ -83,7 +83,7 @@ docker compose -f docker-compose.yaml -f docker-compose.traefik.yml down
 
 页面和 API 由同一个 Go 服务提供，不需要单独构建前端。`dist/` 是历史静态发布产物，不参与当前 Docker 镜像构建。
 
-主页页脚展示今日和累计成功计算次数，数据保存在 SQLite。Docker Compose 默认将数据库保存在 `jsq-data` 持久化卷中；可用 `DB_PATH` 修改容器内路径。计算接口默认按客户端 IP 每分钟限制 30 次，可通过 `CALCULATE_RATE_LIMIT` 和 `CALCULATE_RATE_WINDOW` 调整；达到限制时返回 HTTP 429。
+主页页脚展示当前版本、今日和累计成功计算次数。版本号从发布镜像的 tag 注入，源码运行时显示 `dev`。计算统计保存在 SQLite；Docker Compose 默认将数据库保存在 `jsq-data` 持久化卷中，可用 `DB_PATH` 修改容器内路径。计算接口默认按客户端 IP 每分钟限制 30 次，可通过 `CALCULATE_RATE_LIMIT` 和 `CALCULATE_RATE_WINDOW` 调整；达到限制时返回 HTTP 429。
 
 ### Gitea Actions 发布
 

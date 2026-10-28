@@ -27,6 +27,7 @@ import (
 )
 
 var currencies = []string{"CNY", "USD", "GBP", "EUR", "JPY", "KRW", "HKD", "TWD", "CAD", "SGD", "AUD"}
+var version = "dev"
 
 type app struct {
 	client    *http.Client
@@ -166,6 +167,7 @@ func (a *app) index(w http.ResponseWriter, r *http.Request) {
 		"__SITE_URL__", html.EscapeString(canonical),
 		"__TODAY_CALCULATIONS__", strconv.FormatInt(stats.Today, 10),
 		"__TOTAL_CALCULATIONS__", strconv.FormatInt(stats.Total, 10),
+		"__APP_VERSION__", html.EscapeString(version),
 		"__RATE_ATTRIBUTION__", a.rateAttributionHTML(),
 	).Replace(string(content)))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

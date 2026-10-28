@@ -2,8 +2,9 @@ FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
 COPY go.mod go.sum main.go ./
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/vps-jsq .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-X main.version=${VERSION}" -o /out/vps-jsq .
 
 FROM alpine:3.21
 WORKDIR /app

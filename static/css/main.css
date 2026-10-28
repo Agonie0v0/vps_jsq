@@ -498,8 +498,10 @@ footer div {
     text-align:center;
     margin:auto;
     display:flex;
+    flex-wrap:wrap;
     align-items:center;
-    justify-content:center
+    justify-content:center;
+    gap:4px 8px
 }
 footer a {
     display:flex;
@@ -516,11 +518,12 @@ footer svg {
 footer img {
     margin:0 1px 0 3px
 }
-footer span {
+.footer-separator {
+    display:block;
     height:12px;
     background-color:#ccc;
     width:2px;
-    margin:1em .5em
+    margin:0 2px
 }
 
 /* ByteVibe ledger identity */
@@ -790,6 +793,16 @@ footer {
 }
 footer a {
     color:var(--color-text-secondary);
+}
+.app-version {
+    display:inline-block;
+    width:auto;
+    height:auto;
+    margin:0;
+    background:none;
+    color:var(--color-text-secondary);
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;
 }
 @media (max-width: 760px) {
     #app {

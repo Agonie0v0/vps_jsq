@@ -216,6 +216,7 @@ func TestIndexUsesConfiguredSiteMetadata(t *testing.T) {
 		`href="https://calc.example.test"`,
 		`<link rel="icon" href="/site-icon" />`,
 		`<img class="brand-mark" src="/site-icon" alt="" />`,
+		`<span class="app-version">dev</span>`,
 		"<h1>ByteVibe &lt;Calc&gt;</h1>",
 		`title="Frankfurter 汇率来源" aria-label="Frankfurter 汇率来源"><span class="rate-source-mark rate-source-mark-fr" aria-hidden="true">F</span></a>`,
 	} {

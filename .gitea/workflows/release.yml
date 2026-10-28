@@ -48,6 +48,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            VERSION=${{ gitea.ref_name }}
           tags: |
             ${{ secrets.REGISTRY_HOST }}/${{ gitea.repository }}:${{ gitea.ref_name }}
             ${{ secrets.REGISTRY_HOST }}/${{ gitea.repository }}:latest
