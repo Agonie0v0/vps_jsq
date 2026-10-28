@@ -42,6 +42,7 @@ services:
     image: git.bytevibe.dev/gary/vps_jsq:latest
     container_name: jsq
     restart: unless-stopped
+    user: "${CONTAINER_UID:-0}:${CONTAINER_GID:-0}"
     env_file:
       - .env
     ports:
@@ -62,6 +63,8 @@ docker compose down
 ```
 
 默认服务只绑定 `127.0.0.1:8088`。如需更换端口或绑定地址，修改 `.env` 中的 `HOST_PORT` 和 `HOST_BIND_ADDRESS`。
+
+容器默认以 `root`（UID/GID `0:0`）运行，以兼容 SQLite bind mount。需要使用宿主机普通用户时，在 `.env` 中设置 `CONTAINER_UID` 和 `CONTAINER_GID`，例如 Linux 上可以使用 `id -u` 和 `id -g` 获取当前用户的值；同时确保 `/data` 对应的宿主机目录可被该 UID/GID 写入。
 
 ### Traefik
 
