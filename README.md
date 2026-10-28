@@ -66,6 +66,8 @@ docker compose down
 
 页面和 API 由同一个 Go 服务提供，不需要单独构建前端。`dist/` 是历史静态发布产物，不参与当前 Docker 镜像构建。
 
+主页页脚展示今日和累计成功计算次数，数据保存在 SQLite。Docker Compose 默认将数据库保存在 `jsq-data` 持久化卷中；可用 `DB_PATH` 修改容器内路径。计算接口默认按客户端 IP 每分钟限制 30 次，可通过 `CALCULATE_RATE_LIMIT` 和 `CALCULATE_RATE_WINDOW` 调整；达到限制时返回 HTTP 429。
+
 ## 配置
 
 复制环境变量模板并按需修改：
@@ -95,6 +97,8 @@ cp .env.example .env
 | `SITE_DESCRIPTION`、`SITE_KEYWORDS` | SEO 描述和关键词 |
 | `SITE_URL` | 公网站点 origin，不带路径；用于 canonical 地址和分享链接 |
 | `SITE_ICON_URL` | HTTP(S) 图标地址或站点内绝对路径；留空时使用内置品牌图标 |
+| `DB_PATH` | SQLite 数据库路径，默认 `/data/vps-jsq.db` |
+| `CALCULATE_RATE_LIMIT`、`CALCULATE_RATE_WINDOW` | 单个客户端在限流窗口内可调用计算接口的次数和窗口长度，默认 `30` 次/`1m` |
 
 默认汇率来源为 Frankfurter。服务端会请求并缓存汇率 24 小时；如选择其他数据来源，请遵守其使用条款。Frankfurter 的数据许可见[官方说明](https://frankfurter.dev/license/)。
 
@@ -108,7 +112,7 @@ cp .env.example .env
 
 ## 本地运行
 
-需要 Go 1.23 或更新版本：
+需要 Go 1.26 或更新版本：
 
 ```sh
 go run .

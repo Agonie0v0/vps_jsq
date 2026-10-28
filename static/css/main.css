@@ -768,6 +768,26 @@ footer {
     color:var(--color-text-secondary);
     font-size:12px;
 }
+.usage-stats {
+    display:flex;
+    justify-content:center;
+    gap:28px;
+    margin:18px auto 8px;
+    color:var(--ledger-ink);
+}
+.usage-stats > div {
+    display:flex;
+    align-items:baseline;
+    gap:7px;
+}
+.usage-stats strong {
+    font-size:16px;
+    font-variant-numeric:tabular-nums;
+}
+.usage-stats span {
+    color:var(--color-text-secondary);
+    font-size:12px;
+}
 footer a {
     color:var(--color-text-secondary);
 }

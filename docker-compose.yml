@@ -16,3 +16,11 @@ services:
       SITE_KEYWORDS: ${SITE_KEYWORDS:-VPS,剩余价值,计算器,续费,汇率}
       SITE_URL: ${SITE_URL:-}
       SITE_ICON_URL: ${SITE_ICON_URL:-}
+      DB_PATH: ${DB_PATH:-/data/vps-jsq.db}
+      CALCULATE_RATE_LIMIT: ${CALCULATE_RATE_LIMIT:-30}
+      CALCULATE_RATE_WINDOW: ${CALCULATE_RATE_WINDOW:-1m}
+    volumes:
+      - jsq-data:/data
+
+volumes:
+  jsq-data:

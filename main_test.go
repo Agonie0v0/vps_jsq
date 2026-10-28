@@ -51,6 +51,36 @@ func TestCalculateRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestCalculationStatsPersistDailyAndTotalCounts(t *testing.T) {
+	db, err := openStatsDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := &app{db: db}
+	if got := service.calculationStats(context.Background()); got.Today != 0 || got.Total != 0 {
+		t.Fatalf("initial stats = %+v", got)
+	}
+	for range 2 {
+		if err := service.recordCalculation(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := service.calculationStats(context.Background()); got.Today != 2 || got.Total != 2 {
+		t.Fatalf("updated stats = %+v, want today=2 total=2", got)
+	}
+}
+
+func TestRateLimiterAllowsOnlyConfiguredRequestsPerWindow(t *testing.T) {
+	limiter := newRateLimiter(2, time.Minute)
+	if !limiter.allow("192.0.2.1") || !limiter.allow("192.0.2.1") || limiter.allow("192.0.2.1") {
+		t.Fatal("rate limiter did not enforce the per-key request limit")
+	}
+	if !limiter.allow("192.0.2.2") {
+		t.Fatal("rate limiter should keep independent client keys")
+	}
+}
+
 func TestCalculateAndShareHandlers(t *testing.T) {
 	service := &app{
 		client: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {

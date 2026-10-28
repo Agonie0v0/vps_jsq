@@ -1,11 +1,11 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod main.go ./
+COPY go.mod go.sum main.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/vps-jsq .
 
 FROM alpine:3.21
 WORKDIR /app
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates && mkdir -p /data && chown 10001:10001 /data
 COPY --from=build /out/vps-jsq /app/vps-jsq
 COPY index.html /app/
 COPY static /app/static

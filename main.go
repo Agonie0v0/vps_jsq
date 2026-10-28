@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"log"
 	"math"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,12 +22,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 var currencies = []string{"CNY", "USD", "GBP", "EUR", "JPY", "KRW", "HKD", "TWD", "CAD", "SGD", "AUD"}
 
 type app struct {
 	client    *http.Client
+	db        *sql.DB
 	provider  string
 	rateURL   string
 	staticDir string
@@ -33,6 +38,19 @@ type app struct {
 	mu        sync.Mutex
 	cached    rateResult
 	cacheAt   time.Time
+	limiter   *rateLimiter
+}
+
+type rateLimitEntry struct {
+	started time.Time
+	count   int
+}
+
+type rateLimiter struct {
+	mu      sync.Mutex
+	limit   int
+	window  time.Duration
+	entries map[string]rateLimitEntry
 }
 
 type siteConfig struct {
@@ -89,12 +107,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	db, err := openStatsDB(env("DB_PATH", "/data/vps-jsq.db"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 	service := &app{
+		db:        db,
 		client:    &http.Client{Timeout: 8 * time.Second},
 		provider:  provider,
 		rateURL:   rateURL,
 		staticDir: env("STATIC_DIR", "."),
 		site:      site,
+		limiter:   newRateLimiter(envInt("CALCULATE_RATE_LIMIT", 30), envDuration("CALCULATE_RATE_WINDOW", time.Minute)),
 	}
 	server := &http.Server{Addr: ":" + port, Handler: routes(service), ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("VPS calculator listening on :%s", port)
@@ -133,11 +158,14 @@ func (a *app) index(w http.ResponseWriter, r *http.Request) {
 	if canonical == "" {
 		canonical = requestBaseURL(r)
 	}
+	stats := a.calculationStats(r.Context())
 	content = []byte(strings.NewReplacer(
 		"__SITE_NAME__", html.EscapeString(a.site.Name),
 		"__SITE_DESCRIPTION__", html.EscapeString(a.site.Description),
 		"__SITE_KEYWORDS__", html.EscapeString(a.site.Keywords),
 		"__SITE_URL__", html.EscapeString(canonical),
+		"__TODAY_CALCULATIONS__", strconv.FormatInt(stats.Today, 10),
+		"__TOTAL_CALCULATIONS__", strconv.FormatInt(stats.Total, 10),
 		"__RATE_ATTRIBUTION__", a.rateAttributionHTML(),
 	).Replace(string(content)))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -306,6 +334,12 @@ func (a *app) cachedOrError(err error) (rateResult, error) {
 }
 
 func (a *app) calculate(w http.ResponseWriter, r *http.Request) {
+	if a.limiter != nil && !a.limiter.allow(clientIP(r)) {
+		retryAfter := int(math.Ceil(a.limiter.window.Seconds()))
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeError(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var input calculateRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -317,8 +351,120 @@ func (a *app) calculate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := a.recordCalculation(r.Context()); err != nil {
+		log.Printf("record calculation statistics: %v", err)
+	}
 	result.SharePic = a.makeShareURL(r, input, result)
 	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": result})
+}
+
+type calculationStats struct {
+	Today int64
+	Total int64
+}
+
+func openStatsDB(path string) (*sql.DB, error) {
+	if path != ":memory:" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	for _, statement := range []string{
+		`PRAGMA busy_timeout = 5000`,
+		`PRAGMA journal_mode = WAL`,
+		`CREATE TABLE IF NOT EXISTS daily_calculations (day TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0)`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	return db, nil
+}
+
+func (a *app) recordCalculation(ctx context.Context) error {
+	if a.db == nil {
+		return nil
+	}
+	day := time.Now().In(statsLocation()).Format("2006-01-02")
+	_, err := a.db.ExecContext(ctx, `INSERT INTO daily_calculations(day, count) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET count = count + 1`, day)
+	return err
+}
+
+func (a *app) calculationStats(ctx context.Context) calculationStats {
+	if a.db == nil {
+		return calculationStats{}
+	}
+	day := time.Now().In(statsLocation()).Format("2006-01-02")
+	var stats calculationStats
+	if err := a.db.QueryRowContext(ctx, `SELECT COALESCE(count, 0) FROM daily_calculations WHERE day = ?`, day).Scan(&stats.Today); err != nil && err != sql.ErrNoRows {
+		return calculationStats{}
+	}
+	if err := a.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(count), 0) FROM daily_calculations`).Scan(&stats.Total); err != nil {
+		return calculationStats{}
+	}
+	return stats
+}
+
+func statsLocation() *time.Location {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("CST", 8*60*60)
+	}
+	return location
+}
+
+func (l *rateLimiter) allow(key string) bool {
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if entry, ok := l.entries[key]; ok && now.Sub(entry.started) < l.window {
+		if entry.count >= l.limit {
+			return false
+		}
+		entry.count++
+		l.entries[key] = entry
+		return true
+	}
+	l.entries[key] = rateLimitEntry{started: now, count: 1}
+	return true
+}
+
+func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+	if limit < 1 {
+		limit = 1
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	return &rateLimiter{limit: limit, window: window, entries: make(map[string]rateLimitEntry)}
+}
+
+func clientIP(r *http.Request) string {
+	for _, header := range []string{"X-Real-IP", "X-Forwarded-For"} {
+		if value := strings.TrimSpace(strings.Split(r.Header.Get(header), ",")[0]); value != "" {
+			if ip := net.ParseIP(value); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		if ip := net.ParseIP(host); ip != nil {
+			return ip.String()
+		}
+	}
+	if r.RemoteAddr != "" {
+		if ip := net.ParseIP(r.RemoteAddr); ip != nil {
+			return ip.String()
+		}
+	}
+	return "unknown"
 }
 
 func calculate(input calculateRequest, r *http.Request) (resultData, error) {
@@ -727,4 +873,20 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value, err := time.ParseDuration(strings.TrimSpace(os.Getenv(key)))
+	if err != nil {
+		return fallback
+	}
+	return value
 }
